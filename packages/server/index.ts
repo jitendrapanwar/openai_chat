@@ -1,10 +1,17 @@
 import express from "express";
 import type { Request, Response } from "express";
 import dotenv from "dotenv";
+import OpenAI from "openai";
+import z from "zod";
 
 dotenv.config();
 
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 const app = express();
+app.use(express.json());
 const port = process.env.PORT || 3000;
 
 app.get("/", (req: Request, res: Response) => {
@@ -13,6 +20,30 @@ app.get("/", (req: Request, res: Response) => {
 
 app.get("/api/hello", (req: Request, res: Response) => {
   res.json({ message: "Hello from the API!" });
+});
+
+const conversations = new Map<string, string>();
+
+const chatRequestSchema = z.object({
+  prompt: z.string(),
+  conversationId: z.string().optional(),
+});
+
+app.post("/api/chat", async (req: Request, res: Response) => {
+  const { prompt, conversationId } = req.body;
+
+  const response = await client.responses.create({
+    model: "gpt-4o-mini",
+    input: prompt,
+    temperature: 0.1,
+    max_output_tokens: 100,
+    previous_response_id: conversationId
+      ? conversations.get(conversationId)
+      : undefined,
+  });
+  conversations.set(conversationId, response.id);
+
+  res.json({ message: response.output_text });
 });
 
 app.listen(port, () => {
